@@ -1,0 +1,15 @@
+# 测试产物
+tools/shots/
+tools/.deps/
+.chrome-prof*/
+node_modules/
+
+# 系统
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 编辑器
+.vscode/
+.idea/
+*.log

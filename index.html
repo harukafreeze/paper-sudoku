@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f3ede2">
+<title>纸上数独 · Paper Sudoku</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%23f3ede2'/><text x='50' y='72' font-size='64' text-anchor='middle' font-family='Georgia' fill='%233a332c'>9</text></svg>">
+</head>
+<body>
+<div class="grain" aria-hidden="true"></div>
+
+<header class="topbar">
+  <a class="brand" href="#" data-nav="home" aria-label="回到首页">
+    <span class="brand-mark">9</span>
+    <span class="brand-text">
+      <strong>纸上数独</strong>
+      <em>paper&nbsp;sudoku</em>
+    </span>
+  </a>
+  <nav class="tabs" aria-label="主导航">
+    <button class="tab" data-nav="home">开局</button>
+    <button class="tab" data-nav="stats">战绩</button>
+    <button class="tab" data-nav="codex">图鉴</button>
+    <button class="tab" data-nav="settings">设置</button>
+  </nav>
+</header>
+
+<main id="app">
+
+  <!-- ============ 首页 ============ -->
+  <section class="screen home-screen" data-screen="home">
+    <div class="hero-art" aria-hidden="true">
+      <svg viewBox="0 0 216 216" fill="none" stroke="currentColor">
+        <g stroke-width="1">
+          <path d="M24 0V216M48 0V216M96 0V216M120 0V216M168 0V216M192 0V216" />
+          <path d="M0 24H216M0 48H216M0 96H216M0 120H216M0 168H216M0 192H216" />
+        </g>
+        <g stroke-width="2.4">
+          <path d="M72 0V216M144 0V216" />
+          <path d="M0 72H216M0 144H216" />
+        </g>
+      </svg>
+    </div>
+    <div class="hero">
+      <h1>今天，只推一格。</h1>
+      <p>七档难度，按「真实用到的解题技巧」分级，不是按空格多少。<br>慢一点也没关系，这一页不会催你。</p>
+    </div>
+
+    <div class="home-top">
+      <div class="card daily-card" id="daily-card"></div>
+      <div class="card tip-card" id="tip-card"></div>
+      <div class="card resume-card" id="resume-card" hidden></div>
+    </div>
+
+    <div class="section-head">
+      <h2>选个难度</h2>
+      <span class="section-note">每档都标注了「最多会用到哪一招」</span>
+    </div>
+    <div class="diff-grid" id="diff-grid"></div>
+
+    <div class="home-foot">
+      <div class="foot-line"><b id="foot-plays">0</b> 局完成 · <b id="foot-streak">0</b> 天连着来</div>
+      <a class="text-link" href="#" data-nav="codex">还不会解题？从技巧图鉴开始 →</a>
+    </div>
+  </section>
+
+  <!-- ============ 对局 ============ -->
+  <section class="screen" data-screen="game">
+    <div class="game-wrap">
+      <div class="board-col">
+        <div class="game-head">
+          <button class="ghost-btn" data-act="to-home">← 退出</button>
+          <div class="game-title">
+            <span id="game-title">中等</span>
+            <em id="game-sub">正在出题…</em>
+          </div>
+          <div class="game-stats">
+            <div class="stat"><b id="stat-time">00:00</b><i>用时</i></div>
+            <div class="stat"><b id="stat-mistake">0</b><i>失误</i></div>
+            <div class="stat"><b id="stat-hint">0</b><i>提示</i></div>
+            <button class="icon-btn" data-act="pause" title="暂停">❚❚</button>
+          </div>
+        </div>
+
+        <div class="board-shell" id="board-shell">
+          <div class="board" id="board" role="grid" aria-label="数独棋盘"></div>
+          <div class="bare-veil" id="pause-veil" hidden>
+            <div class="veil-inner">
+              <span class="veil-title">已暂停</span>
+              <button class="btn" data-act="unpause">继续</button>
+            </div>
+          </div>
+          <div class="loading-veil" id="loading-veil">
+            <div class="veil-inner">
+              <span class="spinner"></span>
+              <span class="veil-title" id="loading-text">正在出题…</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="board-tools">
+          <button class="tool" data-act="undo" title="撤销 (Ctrl+Z)"><span>↶</span>撤销</button>
+          <button class="tool" data-act="redo" title="重做 (Ctrl+Y)"><span>↷</span>重做</button>
+          <button class="tool" data-act="erase" title="擦除 (Backspace)"><span>⌫</span>擦除</button>
+          <button class="tool toggle" data-act="note" id="note-btn" title="笔记模式 (N)"><span>✎</span>笔记</button>
+          <button class="tool accent" data-act="hint" title="提示"><span>?</span>提示</button>
+        </div>
+      </div>
+
+      <aside class="side-col">
+        <div class="numpad" id="numpad" aria-label="数字键盘"></div>
+        <div class="card side-card" id="hint-card" hidden></div>
+        <div class="card side-card" id="progress-card"></div>
+        <p class="keyhint">
+          <span class="kh"><kbd>1</kbd>–<kbd>9</kbd> 填数</span>
+          <span class="kh"><kbd>N</kbd> 笔记</span>
+          <span class="kh"><kbd>空格</kbd> 擦除</span>
+          <span class="kh"><kbd>方向键</kbd> 移动</span>
+        </p>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ============ 战绩 ============ -->
+  <section class="screen" data-screen="stats">
+    <div class="page-head">
+      <h1>战绩</h1>
+      <p>只存在这台设备的浏览器里。换设备请用「设置」里的导出。</p>
+    </div>
+    <div class="stat-overview" id="stat-overview"></div>
+    <div class="section-head"><h2>分难度</h2></div>
+    <div class="card table-card">
+      <table class="diff-table" id="diff-table"></table>
+    </div>
+    <div class="two-col">
+      <div>
+        <div class="section-head"><h2>最近对局</h2></div>
+        <div class="card list-card" id="recent-list"></div>
+      </div>
+      <div>
+        <div class="section-head"><h2>成就</h2></div>
+        <div class="ach-grid" id="ach-grid"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 图鉴 ============ -->
+  <section class="screen" data-screen="codex">
+    <div class="page-head">
+      <h1>技巧图鉴</h1>
+      <p>十一张卡片，从「看一眼就能填」到「要在纸上画链」。<br>难度档位就是按这里最靠后的那一招定的。</p>
+    </div>
+    <div class="card table-card">
+      <table class="level-table" id="level-table"></table>
+    </div>
+    <div class="codex-head" id="codex-head"></div>
+    <div class="codex-grid" id="codex-grid"></div>
+  </section>
+
+  <!-- ============ 课程 ============ -->
+  <section class="screen" data-screen="lesson">
+    <div class="lesson-wrap">
+      <div class="lesson-left">
+        <div class="lesson-bar">
+          <button class="ghost-btn" data-act="lesson-back">← 返回图鉴</button>
+          <div class="lesson-dots" id="lesson-dots"></div>
+        </div>
+        <div class="board-shell">
+          <div class="board" id="lesson-board" role="grid" aria-label="教学棋盘"></div>
+          <div class="loading-veil" id="lesson-loading">
+            <div class="veil-inner"><span class="spinner"></span><span class="veil-title">正在找一道合适的例子…</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="lesson-right">
+        <div class="lesson-card">
+          <div class="lesson-kicker" id="lesson-kicker">第 1 课</div>
+          <h1 id="lesson-title">唯一候选</h1>
+          <p class="lesson-sub" id="lesson-sub"></p>
+          <div class="lesson-body">
+            <h3>这是什么</h3>
+            <p id="lesson-what"></p>
+            <h3>为什么成立</h3>
+            <p id="lesson-why"></p>
+            <h3>轮到你了</h3>
+            <p id="lesson-prompt"></p>
+          </div>
+          <div class="lesson-feedback" id="lesson-feedback"></div>
+          <div class="lesson-actions">
+            <button class="btn" data-act="lesson-check" id="lesson-check">我点好了</button>
+            <button class="btn ghost" data-act="lesson-next" id="lesson-next" hidden>下一课 →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 设置 ============ -->
+  <section class="screen" data-screen="settings">
+    <div class="page-head">
+      <h1>设置</h1>
+      <p>改完立即生效，不用保存。</p>
+    </div>
+    <div class="card settings-card" id="settings-card"></div>
+    <div class="card settings-card">
+      <h3>数据</h3>
+      <p class="muted">战绩、课程进度、成就都存在浏览器的 localStorage 里。清了浏览器数据就没了，重要的话导出一份。</p>
+      <div class="btn-row">
+        <button class="btn ghost" data-act="export">导出备份</button>
+        <button class="btn ghost" data-act="import">导入备份</button>
+        <button class="btn danger" data-act="reset">清空全部数据</button>
+      </div>
+      <input type="file" id="import-file" accept="application/json" hidden>
+    </div>
+    <div class="card settings-card about-card">
+      <h3>关于</h3>
+      <p>纯静态页面，无账号、无后端、无网络请求。出题、评级、提示全部在本地算。</p>
+      <p class="muted">难度是按「解题必须用到的最难技巧」定的：入门=单数，简单=区块排除，中等=数对，困难=X-Wing / 剑鱼，专家=XY-Wing / 唯一矩形 / 着色，大师=人类技巧走不下去。</p>
+    </div>
+  </section>
+
+</main>
+
+<!-- 提示浮层 -->
+<div class="popover" id="hint-popover" hidden>
+  <div class="pop-head">
+    <span class="pop-kicker" id="pop-kicker">提示 1 / 3</span>
+    <button class="icon-btn" data-act="hint-close">×</button>
+  </div>
+  <p class="pop-title" id="pop-title"></p>
+  <p class="pop-body" id="pop-body"></p>
+  <button class="btn full" data-act="hint-next" id="pop-next">再看一点</button>
+</div>
+
+<!-- 胜利 -->
+<div class="modal" id="win-modal" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="win-title">
+    <div class="confetti" id="confetti" aria-hidden="true"></div>
+    <div class="win-eyebrow" id="win-eyebrow">完成</div>
+    <h2 id="win-title">这一局，稳。</h2>
+    <div class="stars" id="win-stars"></div>
+    <div class="win-grid" id="win-grid"></div>
+    <p class="win-note" id="win-note"></p>
+    <div class="modal-actions">
+      <button class="btn" data-act="win-again">再来一局</button>
+      <button class="btn ghost" data-act="win-share">复制战绩</button>
+      <button class="btn ghost" data-act="win-home">回首页</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script src="js/core.js"></script>
+<script src="js/storage.js"></script>
+<script src="js/game.js"></script>
+<script src="js/tutorial.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
