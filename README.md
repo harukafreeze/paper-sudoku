@@ -2,21 +2,27 @@
 
 一个纯静态的数独小站。没有构建、没有后端、没有账号，**双击 `index.html` 就能玩**，断网也能玩。
 
+**▶ 在线试玩：<https://harukafreeze.github.io/paper-sudoku/>**
+
 ![首页](docs/preview/home.png)
 
 ---
 
 ## 打开方式
 
-直接双击 `index.html`。想用本地服务器也可以：
+三种都行：
+
+1. **在线版**：<https://harukafreeze.github.io/paper-sudoku/>（GitHub Pages，手机也能开）
+2. **本地文件**：双击 `index.html`
+3. **本地服务器**：
 
 ```powershell
-# 在 sudoku 目录下
+# 在本目录下
 python -m http.server 8080
 # 然后打开 http://127.0.0.1:8080
 ```
 
-两者都行。`file://` 下 localStorage 也能用，成绩存得住。
+`file://` 下 localStorage 也能用，成绩存得住。
 
 ---
 
