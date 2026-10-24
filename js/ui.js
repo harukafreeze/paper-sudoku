@@ -17,9 +17,15 @@
     gameCells: [],
     lesson: null,
     lessonCells: [],
-    lessonEx: null,
+    lessonBoardN: 9,
+    lessonSteps: [],
+    lessonIdx: 0,
     lessonSolved: false,
-    lessonRevealed: false,
+    lessonAttempts: 0,
+    lessonAnswerShown: false,
+    lessonPlaced: false,
+    lessonWatchTimer: null,
+    lessonNextId: null,
     hintCells: [],
     hintOpen: false,
     hintLevel: 0,
@@ -125,24 +131,27 @@
    * 棋盘
    * ============================================================ */
 
-  function makeBoard(host) {
+  function makeBoard(host, n) {
+    n = n || 9;
     host.innerHTML = '';
+    host.dataset.n = String(n);
+    const box = n === 4 ? 2 : 3;
     const cells = [];
-    for (let i = 0; i < 81; i++) {
+    for (let i = 0; i < n * n; i++) {
       const d = document.createElement('div');
       d.className = 'cell';
       d.dataset.i = String(i);
       d.setAttribute('role', 'gridcell');
-      const r = (i / 9) | 0, c = i % 9;
-      if (c === 2 || c === 5) d.classList.add('edge-r');
-      if (r === 2 || r === 5) d.classList.add('edge-b');
+      const r = (i / n) | 0, c = i % n;
+      if (c % box === box - 1 && c !== n - 1) d.classList.add('edge-r');
+      if (r % box === box - 1 && r !== n - 1) d.classList.add('edge-b');
       const v = document.createElement('span');
       v.className = 'v';
-      const n = document.createElement('span');
-      n.className = 'notes';
-      for (let k = 0; k < 9; k++) n.appendChild(document.createElement('i'));
+      const notes = document.createElement('span');
+      notes.className = 'notes';
+      for (let k = 0; k < (n === 4 ? 4 : 9); k++) notes.appendChild(document.createElement('i'));
       d.appendChild(v);
-      d.appendChild(n);
+      d.appendChild(notes);
       host.appendChild(d);
       cells.push(d);
     }
@@ -151,7 +160,7 @@
 
   function paintNotes(el, mask) {
     const slots = el.lastElementChild.children;
-    for (let v = 1; v <= 9; v++) {
+    for (let v = 1; v <= slots.length; v++) {
       const on = !!(mask & C.BIT[v]);
       const slot = slots[v - 1];
       if (on) { if (slot.textContent !== String(v)) slot.textContent = String(v); }
@@ -161,7 +170,7 @@
 
   function clearNotes(el) {
     const slots = el.lastElementChild.children;
-    for (let k = 0; k < 9; k++) if (slots[k].textContent) slots[k].textContent = '';
+    for (let k = 0; k < slots.length; k++) if (slots[k].textContent) slots[k].textContent = '';
   }
 
   function pop(i) {
@@ -809,10 +818,43 @@
   }
 
   /* ============================================================
-   * 图鉴
+   * 教程（课程目录）
    * ============================================================ */
 
   function renderCodex() {
+    const prog = Store.lessonProgress();
+    $('#course-progress').innerHTML =
+      '<div class="cp-top"><span class="cp-label">学习进度</span><b>' + prog.done + ' / ' + prog.total + '</b></div>' +
+      '<div class="bar"><span style="width:' + Math.round((prog.done / prog.total) * 100) + '%"></span></div>' +
+      '<p class="cp-hint">' + (prog.done === 0
+        ? '从第 1 课开始。每节课只教一件事，十分钟以内。'
+        : (prog.done >= prog.total
+          ? '全部学完了。去「困难」里实战吧，卡住就回来查速查表。'
+          : '接着上次的往下。不用记笔记，忘了随时回来重看。')) + '</p>';
+
+    $('#chapter-list').innerHTML = SD.tutorial.CHAPTERS.map(function (ch) {
+      const list = SD.tutorial.LESSONS.filter(function (l) { return l.ch === ch.id; });
+      const done = list.filter(function (l) { return Store.lessonDone(l.id); }).length;
+      return '<section class="chapter">' +
+        '<div class="chapter-head">' +
+        '<span class="ch-id">' + String(ch.id).padStart(2, '0') + '</span>' +
+        '<div class="ch-text"><h3>' + esc(ch.title) + '</h3><p>' + esc(ch.desc) + '</p></div>' +
+        '<span class="ch-count">' + done + ' / ' + list.length + '</span>' +
+        '</div>' +
+        '<div class="lesson-rows">' +
+        list.map(function (l) {
+          const isDone = Store.lessonDone(l.id);
+          return '<button class="lesson-row' + (isDone ? ' done' : '') + '" data-lesson="' + l.id + '">' +
+            '<span class="lr-mark">' + (isDone ? '✓' : '○') + '</span>' +
+            '<span class="lr-main"><b>' + esc(l.title) + '</b><em>' + esc(l.goal) + '</em></span>' +
+            '<span class="lr-min">' + l.min + ' 分钟</span>' +
+            '<span class="lr-go">→</span>' +
+            '</button>';
+        }).join('') +
+        '</div></section>';
+    }).join('');
+
+    /* 难度对照 */
     let rows = '<thead><tr><th>档位</th><th>这一档最多会用到</th></tr></thead><tbody>';
     const byLevel = {};
     C.TECHNIQUES.forEach(function (t) {
@@ -827,148 +869,301 @@
     rows += '</tbody>';
     $('#level-table').innerHTML = rows;
 
-    const prog = Store.lessonProgress();
-    $('#codex-head').innerHTML =
-      '<span>学习进度 <b>' + prog.done + ' / ' + prog.total + '</b></span>' +
-      '<span class="bar"><span style="width:' + Math.round((prog.done / prog.total) * 100) + '%"></span></span>' +
-      '<span>' + (prog.done === 0 ? '从第 1 课开始，十分钟一课' : (prog.done >= prog.total ? '全部学完了' : '接着上次的往下')) + '</span>';
-
-    $('#codex-grid').innerHTML = SD.tutorial.CODEX.map(function (c, idx) {
-      const t = C.TECH_BY_NAME[c.tech];
-      const lesson = SD.tutorial.LESSONS.filter(function (l) { return l.tech === c.tech; })[0];
-      const done = lesson && Store.lessonDone(lesson.id);
-      return '<div class="codex-card">' +
-        '<div class="codex-head">' +
-        '<span class="codex-idx">' + String(idx + 1).padStart(2, '0') + '</span>' +
-        '<span class="codex-lv lv' + t.level + '">' + names[t.level - 1] + '</span>' +
-        (done ? '<span class="codex-done">✓ 学过</span>' : '') +
-        '</div>' +
-        '<h3>' + esc(t.label) + '</h3>' +
-        '<p class="codex-one">' + esc(c.one) + '</p>' +
-        '<p class="codex-when">什么时候用：' + esc(c.when) + '</p>' +
-        (lesson ? '<button class="text-link" data-lesson="' + lesson.id + '">去练这一课 →</button>' : '') +
-        '</div>';
-    }).join('');
+    /* 技巧速查 */
+    let trows = '<thead><tr><th>技巧</th><th>一句话</th><th>什么时候用</th></tr></thead><tbody>';
+    SD.tutorial.TECH_REF.forEach(function (r) {
+      const t = C.TECH_BY_NAME[r.tech];
+      if (!t) return;
+      trows += '<tr><td>' + esc(t.label) + '</td><td>' + esc(r.one) +
+        '</td><td class="muted">' + esc(r.when) + '</td></tr>';
+    });
+    trows += '</tbody>';
+    $('#tech-table').innerHTML = trows;
   }
 
   /* ============================================================
-   * 课程
+   * 上课
    * ============================================================ */
 
-  function openLesson(id, keepScreen) {
+  function fmt(text) {
+    if (!text) return '';
+    let s = String(text);
+    s = s.replace(/<kbd>(.*?)<\/kbd>/g, function (_, k) { return '\u0001' + k + '\u0002'; });
+    s = esc(s);
+    s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    s = s.replace(/\u0001(.*?)\u0002/g, '<kbd>$1</kbd>');
+    s = s.replace(/\n/g, '<br>');
+    return s;
+  }
+
+  function ensureLessonBoard(n) {
+    if (state.lessonBoardN !== n) {
+      state.lessonCells = makeBoard($('#lesson-board'), n);
+      state.lessonBoardN = n;
+    }
+    $('#lesson-board-shell').classList.toggle('mini', n === 4);
+  }
+
+  function openLesson(id) {
     const lesson = SD.tutorial.byId[id];
     if (!lesson) { nav('codex'); return; }
+
+    clearTimeout(state.lessonWatchTimer);
     state.lesson = lesson;
+    state.lessonSteps = [];
+    state.lessonIdx = 0;
     state.lessonSolved = false;
-    state.lessonRevealed = false;
-    state.lessonEx = null;
+    state.lessonAttempts = 0;
+    state.lessonAnswerShown = false;
+    state.lessonPlaced = false;
+    state.lessonNextId = null;
 
-    if (!keepScreen) showScreen('lesson');
+    showScreen('lesson');
 
-    $('#lesson-kicker').textContent = '第 ' + lesson.id + ' 课 · ' + lesson.tag;
-    $('#lesson-title').textContent = lesson.name;
-    $('#lesson-sub').textContent = lesson.sub;
-    $('#lesson-what').textContent = lesson.what;
-    $('#lesson-why').textContent = lesson.why;
-    $('#lesson-prompt').textContent = lesson.prompt;
+    const ch = SD.tutorial.chapterOf(lesson.ch);
+    $('#lesson-kicker').textContent = '第 ' + ch.id + ' 章 · ' + ch.title;
+    $('#lesson-title').textContent = lesson.title;
+    $('#lesson-goal').textContent = '学完你能：' + lesson.goal;
+    $('#lesson-caption').textContent = '';
+    $('#step-label').textContent = '';
+    $('#step-instruction').textContent = '';
+    $('#step-body').innerHTML = '';
+    $('#step-options').innerHTML = '';
+    $('#step-progress').innerHTML = '';
     $('#lesson-feedback').className = 'lesson-feedback';
     $('#lesson-feedback').innerHTML = '';
+    $('#lesson-continue').hidden = true;
+    $('#lesson-reveal').hidden = true;
     $('#lesson-next').hidden = true;
-    $('#lesson-check').hidden = false;
-    $('#lesson-check').textContent = '看答案';
-
-    // 进度点
-    const prog = Store.lessonProgress();
-    $('#lesson-dots').innerHTML = SD.tutorial.LESSONS.map(function (l) {
-      const done = Store.lessonDone(l.id);
-      const cur = l.id === lesson.id;
-      return '<span class="ldot' + (done ? ' done' : '') + (cur ? ' cur' : '') + '"></span>';
-    }).join('');
-
-    if (lesson.recap) {
-      renderRecap(lesson);
-      return;
-    }
-
-    $('#lesson-board').parentElement.hidden = false;
+    $('#lesson-left').hidden = false;
     $('#lesson-loading').hidden = false;
-    state.lessonCells = state.lessonCells.length ? state.lessonCells : makeBoard($('#lesson-board'));
 
     setTimeout(function () {
-      let ex = null;
-      try { ex = SD.tutorial.build(lesson, 0); } catch (e) { console.error(e); }
+      let built = null;
+      try { built = SD.tutorial.materialize(lesson, 0); } catch (e) { console.error(e); }
       $('#lesson-loading').hidden = true;
 
-      if (!ex) {
+      if (!built) {
         $('#lesson-feedback').className = 'lesson-feedback bad';
-        $('#lesson-feedback').textContent = '这一课的例子没生成出来（这种情况很少），换一题试试。';
-        $('#lesson-check').textContent = '换一题';
+        $('#lesson-feedback').textContent = '这一课的例子没生成出来（很少见）。退回去再进一次就好。';
         return;
       }
-      state.lessonEx = ex;
-      renderLessonBoard();
-    }, 40);
+      state.lessonSteps = built.steps;
+      state.lessonIdx = 0;
+      renderStep();
+    }, 30);
   }
 
-  function renderRecap(lesson) {
-    $('#lesson-board').parentElement.hidden = true;
-    $('#lesson-loading').hidden = true;
-    $('#lesson-check').hidden = true;
-    $('#lesson-next').hidden = false;
-    $('#lesson-next').textContent = '去开一局 →';
-    $('#lesson-feedback').className = 'lesson-feedback good';
-    $('#lesson-feedback').innerHTML =
-      '<b>进度：' + Store.lessonProgress().done + ' / ' + Store.lessonProgress().total + '</b>' +
-      '<p>' + esc(lesson.tip) + '</p>';
+  function renderStep() {
+    const steps = state.lessonSteps;
+    const i = state.lessonIdx;
+    if (!steps.length) return;
+    if (i >= steps.length) return finishLesson();
+
+    const st = steps[i];
+    clearTimeout(state.lessonWatchTimer);
+    state.lessonSolved = false;
+    state.lessonAttempts = 0;
+    state.lessonAnswerShown = false;
+    state.lessonPlaced = false;
+
+    $('#step-label').textContent = '第 ' + (i + 1) + ' 步 / 共 ' + steps.length + ' 步';
+    $('#step-progress').innerHTML = steps.map(function (_, k) {
+      return '<span class="sp-dot' + (k < i ? ' done' : '') + (k === i ? ' cur' : '') + '"></span>';
+    }).join('');
+
+    $('#lesson-feedback').className = 'lesson-feedback';
+    $('#lesson-feedback').innerHTML = '';
+    $('#step-options').innerHTML = '';
+    $('#lesson-continue').hidden = true;
+    $('#lesson-reveal').hidden = true;
+    $('#lesson-next').hidden = true;
+    $('#lesson-caption').textContent = st.caption || '';
+
+    const cont = $('#lesson-continue');
+
+    if (st.kind === 'text' || st.kind === 'summary') {
+      $('#step-instruction').innerHTML = fmt(st.title || '');
+      $('#step-body').innerHTML = fmt(st.body || '');
+      cont.hidden = false;
+      cont.textContent = (i === steps.length - 1) ? '完成这一课' : '继续';
+      state.lessonSolved = true;
+    } else if (st.kind === 'watch') {
+      $('#step-instruction').textContent = '看一遍';
+      $('#step-body').innerHTML = fmt(st.body || '');
+    } else if (st.kind === 'find' || st.kind === 'click') {
+      $('#step-instruction').textContent = st.instruction || '';
+      $('#step-body').innerHTML = '';
+      if (st.roundLabel) $('#step-label').textContent = st.roundLabel;
+    } else if (st.kind === 'quiz') {
+      $('#step-instruction').textContent = st.instruction || '';
+      $('#step-body').innerHTML = '';
+      renderQuiz(st);
+    }
+
+    if (st.kind === 'find' || st.kind === 'click') {
+      $('#lesson-reveal').hidden = false;
+      $('#lesson-reveal').textContent = '看答案';
+    }
+
+    renderLessonBoard(st);
+    if (st.kind === 'watch') startWatch(st);
   }
 
-  function renderLessonBoard() {
-    const ex = state.lessonEx;
-    if (!ex) return;
+  function renderQuiz(st) {
+    $('#step-options').innerHTML = st.options.map(function (o, k) {
+      return '<button class="opt" data-opt="' + k + '">' + esc(o) + '</button>';
+    }).join('');
+  }
+
+  function startWatch(st) {
+    state.lessonWatchTimer = setTimeout(function () {
+      state.lessonPlaced = true;
+      renderLessonBoard(st);
+      const fb = $('#lesson-feedback');
+      fb.className = 'lesson-feedback good';
+      fb.innerHTML = '<b>看到了吗</b>' + fmt(st.ex.explain);
+      const cont = $('#lesson-continue');
+      cont.hidden = false;
+      cont.textContent = '轮到我';
+      sfx.ok();
+    }, 1200);
+  }
+
+  /* ---------- 棋盘绘制 ---------- */
+
+  function renderLessonBoard(st) {
+    const hasBoard = !!(st.board || st.ex);
+    $('#lesson-left').hidden = !hasBoard;
+    $('#lesson-wrap').classList.toggle('no-board', !hasBoard);
+    if (st.board) { paintStatic(st); return; }
+    if (st.ex) { paintExBoard(st); return; }
+  }
+
+  function paintStatic(st) {
+    const b = st.board;
+    const n = b.n;
+    const box = n === 4 ? 2 : 3;
+    ensureLessonBoard(n);
     const cells = state.lessonCells;
-    const g = ex.before;
+
+    const bright = new Set();
+    (st.targets || []).forEach(function (i) { bright.add(i); });
+    (st.highlight || []).forEach(function (i) { bright.add(i); });
+    (st.focus || []).forEach(function (i) { bright.add(i); });
+
+    // 单选题只有一个焦点格时，行/列/宫就是解题的证据，必须保持明亮
+    const peersCell = (st.peersOf != null) ? st.peersOf
+      : ((st.kind === 'quiz' && st.focus && st.focus.length === 1) ? st.focus[0] : null);
+
+    let pr = -1, pc = -1, br0 = 0, bc0 = 0;
+    if (peersCell != null) {
+      pr = (peersCell / n) | 0; pc = peersCell % n;
+      br0 = Math.floor(pr / box) * box;
+      bc0 = Math.floor(pc / box) * box;
+      for (let k = 0; k < n * n; k++) {
+        const rr = (k / n) | 0, cc = k % n;
+        if (rr === pr || cc === pc ||
+            (rr >= br0 && rr < br0 + box && cc >= bc0 && cc < bc0 + box)) bright.add(k);
+      }
+    }
+
+    const dim = bright.size > 0;
+    for (let i = 0; i < n * n; i++) {
+      const el = cells[i];
+      const v = b.cells[i];
+      const cl = el.classList;
+      cl.toggle('given', !!v);
+      cl.toggle('user', false);
+      cl.toggle('sel', false);
+      cl.toggle('peer', false);
+      cl.toggle('same', false);
+      cl.toggle('conflict', false);
+      cl.toggle('wrong', false);
+      cl.toggle('hint', false);
+      cl.toggle('target', false);
+      cl.toggle('good', !!(state.lessonSolved && st.targets && st.targets.indexOf(i) >= 0));
+      cl.toggle('dim', dim && !bright.has(i));
+      el.firstElementChild.textContent = v ? String(v) : '';
+      clearNotes(el);
+    }
+
+    if (peersCell != null) {
+      for (let k = 0; k < n * n; k++) {
+        if (k === peersCell) continue;
+        const rr = (k / n) | 0, cc = k % n;
+        if (rr === pr || cc === pc ||
+            (rr >= br0 && rr < br0 + box && cc >= bc0 && cc < bc0 + box)) {
+          cells[k].classList.add('peer');
+        }
+      }
+      cells[peersCell].classList.add('sel');
+    }
+    (st.focus || []).forEach(function (i) { if (cells[i]) cells[i].classList.add('sel'); });
+  }
+
+  function paintExBoard(st) {
+    const ex = st.ex;
+    ensureLessonBoard(9);
+    const cells = state.lessonCells;
+    const g = Uint8Array.from(ex.before);
+
+    const revealed = (st.kind === 'watch' && state.lessonPlaced) ||
+      (st.kind === 'find' && state.lessonSolved);
+
+    if (revealed && ex.step.place.length) {
+      ex.step.place.forEach(function (p) { g[p[0]] = p[1]; });
+    }
+
+    const bright = new Set();
+    ex.focus.forEach(function (i) { bright.add(i); });
+    ex.accept.forEach(function (i) { bright.add(i); });
+    ex.targets.forEach(function (i) { bright.add(i); });
+    if (ex.unit != null) C.UNITS[ex.unit].forEach(function (i) { bright.add(i); });
+    if (ex.tech === 'nakedSingle' || ex.tech === 'hiddenSingle') {
+      C.PEERS[ex.accept[0]].forEach(function (i) { bright.add(i); });
+    }
+
     for (let i = 0; i < 81; i++) {
       const el = cells[i];
       const v = g[i];
       const cl = el.classList;
       cl.toggle('given', !!ex.puzzle[i]);
       cl.toggle('user', !ex.puzzle[i] && !!v);
-      cl.toggle('sel', false);
+      cl.toggle('sel', st.kind === 'watch' && ex.focus.indexOf(i) >= 0 && !v);
       cl.toggle('peer', false);
       cl.toggle('same', false);
       cl.toggle('conflict', false);
       cl.toggle('wrong', false);
-      cl.toggle('good', false);
-      cl.toggle('hint', state.lessonSolved && ex.focus.indexOf(i) >= 0 && !v);
-      cl.toggle('target', state.lessonSolved && ex.targets.indexOf(i) >= 0 && !v);
+      cl.toggle('dim', !bright.has(i));
+      cl.toggle('hint', revealed && ex.focus.indexOf(i) >= 0 && !v);
+      cl.toggle('target', revealed && ex.targets.indexOf(i) >= 0 && !g[i]);
+      cl.toggle('good', revealed && ex.accept.indexOf(i) >= 0);
+
       el.firstElementChild.textContent = v ? String(v) : '';
       if (!v && ex.cand[i]) paintNotes(el, ex.cand[i]);
       else clearNotes(el);
     }
   }
 
+  /* ---------- 互动 ---------- */
+
   function lessonClick(i) {
-    const ex = state.lessonEx;
-    if (!ex || state.lessonSolved) return;
-    const ok = SD.tutorial.check(ex, i);
-    if (!ok) {
-      shakeLesson(i);
-      const fb = $('#lesson-feedback');
-      fb.className = 'lesson-feedback bad';
-      const isElim = ex.step.elim && ex.step.elim.length > 0;
-      if (isElim && ex.focus.indexOf(i) >= 0) {
-        fb.textContent = '这一格是「组成图形」的格子。再找找——题目要的是被删掉候选的那一格。';
-      } else if (isElim && ex.accept.length > 1) {
-        fb.textContent = '差一点。这一步被删掉候选的不止一格，再看看别的。';
-      } else {
-        fb.textContent = '不是这里。' + (state.lesson ? state.lesson.tip : '');
-      }
+    const st = state.lessonSteps[state.lessonIdx];
+    if (!st || state.lessonSolved) return;
+
+    if (st.kind === 'click') {
+      if ((st.targets || []).indexOf(i) >= 0) succeedStatic(st);
+      else failStatic(st);
       return;
     }
-    succeedLesson(i);
+    if (st.kind === 'find') {
+      if (st.ex.accept.indexOf(i) >= 0) succeedFind(st);
+      else failFind(st, i);
+    }
   }
 
-  function shakeLesson(i) {
+  function shakeCell(i) {
     const el = state.lessonCells[i];
     if (!el) return;
     el.classList.remove('shake');
@@ -977,59 +1172,151 @@
     setTimeout(function () { el.classList.remove('shake'); }, 420);
   }
 
-  function succeedLesson(i) {
-    if (state.lessonSolved) return;
+  function succeedStatic(st) {
     state.lessonSolved = true;
-    const ex = state.lessonEx;
-    const lesson = state.lesson;
-
-    Store.markLesson(lesson.id);
-    sfx.ok();
-
-    renderLessonBoard();
-    state.lessonCells[i].classList.add('good');
-
+    paintStatic(st);
     const fb = $('#lesson-feedback');
     fb.className = 'lesson-feedback good';
-    fb.innerHTML = '<b>对。</b>' + esc(ex.explain) +
-      '<p class="muted">' + esc(lesson.tip) + '</p>';
-
-    $('#lesson-check').hidden = true;
-    const next = $('#lesson-next');
-    next.hidden = false;
-    next.textContent = lesson.id >= SD.tutorial.LESSONS.length ? '回到图鉴 →' : '下一课 →';
+    fb.innerHTML = '<b>就是这个。</b>' + fmt(st.explain || '');
+    const cont = $('#lesson-continue');
+    cont.hidden = false;
+    cont.textContent = '继续';
+    $('#lesson-reveal').hidden = true;
+    sfx.ok();
   }
 
-  function revealLesson() {
-    const ex = state.lessonEx;
-    if (!ex) {
-      // 例子生成失败时，按钮变成换一题
-      openLesson(state.lesson.id);
-      return;
-    }
-    if (state.lessonSolved) return;
-    state.lessonSolved = true;
-    state.lessonRevealed = true;
-    const lesson = state.lesson;
-    Store.markLesson(lesson.id);
+  function failStatic(st) {
+    const fb = $('#lesson-feedback');
+    fb.className = 'lesson-feedback bad';
+    fb.textContent = '不是这一格。' + (st.hint || '');
+  }
 
-    renderLessonBoard();
+  function succeedFind(st) {
+    state.lessonSolved = true;
+    paintExBoard(st);
+    const fb = $('#lesson-feedback');
+    fb.className = 'lesson-feedback good';
+    fb.innerHTML = '<b>对。</b>' + fmt(st.ex.explain);
+    const cont = $('#lesson-continue');
+    cont.hidden = false;
+    cont.textContent = '继续';
+    $('#lesson-reveal').hidden = true;
+    sfx.ok();
+  }
+
+  function failFind(st, i) {
+    state.lessonAttempts++;
+
+    if (state.lessonAttempts === 1) {
+      shakeCell(i);
+    } else {
+      const empty = !st.ex.before[i];
+      const cands = empty && st.ex.cand[i] ? C.bits(st.ex.cand[i]) : [];
+      if (cands.length > 1) {
+        const fb = $('#lesson-feedback');
+        fb.className = 'lesson-feedback bad';
+        fb.textContent = '这一格有 ' + cands.length + ' 个候选（' + cands.join('、') + '），不是我们要找的那一格。';
+        if (state.lessonAttempts >= 2) {
+          $('#lesson-reveal').hidden = false;
+          $('#lesson-reveal').textContent = '直接看答案';
+        }
+        return;
+      }
+    }
+
+    const fb = $('#lesson-feedback');
+    fb.className = 'lesson-feedback bad';
+    fb.innerHTML = (state.lessonAttempts === 1 ? '不是这里。' : '') + fmt(st.hint || '');
+    if (state.lessonAttempts >= 2) {
+      $('#lesson-reveal').hidden = false;
+      $('#lesson-reveal').textContent = '直接看答案';
+    }
+  }
+
+  function answerQuiz(k) {
+    const st = state.lessonSteps[state.lessonIdx];
+    if (!st || st.kind !== 'quiz' || state.lessonSolved) return;
+
+    const opts = $$('#step-options .opt');
+    if (k === st.answer) {
+      state.lessonSolved = true;
+      opts.forEach(function (b, idx) {
+        b.classList.add(idx === k ? 'right' : 'mute');
+        b.disabled = true;
+      });
+      const fb = $('#lesson-feedback');
+      fb.className = 'lesson-feedback good';
+      fb.innerHTML = '<b>对。</b>' + fmt(st.explain || '');
+      const cont = $('#lesson-continue');
+      cont.hidden = false;
+      cont.textContent = '继续';
+      if (st.board) paintStatic(st);
+      sfx.ok();
+    } else {
+      opts[k].classList.add('wrong');
+      const fb = $('#lesson-feedback');
+      fb.className = 'lesson-feedback bad';
+      fb.textContent = '再想一下——把行、列、宫三处的数都划掉再数一遍。';
+    }
+  }
+
+  function revealAnswer() {
+    const st = state.lessonSteps[state.lessonIdx];
+    if (!st || state.lessonSolved) return;
+    if (st.kind !== 'find' && st.kind !== 'click') return;
+
+    state.lessonAnswerShown = true;
+    state.lessonSolved = true;
+
+    if (st.kind === 'click') paintStatic(st);
+    else paintExBoard(st);
+
     const fb = $('#lesson-feedback');
     fb.className = 'lesson-feedback';
-    fb.innerHTML = '<b>答案是打叉的那一格。</b>' + esc(ex.explain) +
-      '<p class="muted">' + esc(lesson.tip) + '</p>';
-    $('#lesson-check').hidden = true;
-    const next = $('#lesson-next');
-    next.hidden = false;
-    next.textContent = lesson.id >= SD.tutorial.LESSONS.length ? '回到图鉴 →' : '下一课 →';
+    fb.innerHTML = '<b>答案标出来了。</b>' + fmt((st.ex || {}).explain || st.explain || '');
+    const cont = $('#lesson-continue');
+    cont.hidden = false;
+    cont.textContent = '继续';
+    $('#lesson-reveal').hidden = true;
+  }
+
+  function continueStep() {
+    if (state.lessonIdx >= state.lessonSteps.length - 1) { finishLesson(); return; }
+    state.lessonIdx++;
+    renderStep();
+  }
+
+  function finishLesson() {
+    const lesson = state.lesson;
+    if (!lesson) { nav('codex'); return; }
+    Store.markLesson(lesson.id);
+
+    const list = SD.tutorial.LESSONS;
+    let idx = -1;
+    for (let k = 0; k < list.length; k++) if (list[k].id === lesson.id) idx = k;
+    const next = idx >= 0 ? list[idx + 1] : null;
+    state.lessonNextId = next ? next.id : null;
+
+    $('#step-label').textContent = '完成';
+    $('#step-instruction').textContent = '这一课过了。';
+    $('#step-body').innerHTML = fmt(lesson.goal || '');
+    $('#step-options').innerHTML = '';
+    $('#lesson-feedback').className = 'lesson-feedback good';
+    $('#lesson-feedback').innerHTML = '<b>✓ ' + esc(lesson.title) + '</b>' +
+      '<p class="muted">' + (next ? '下一课：' + esc(next.title) : '你已经学完所有课了，去实战吧。') + '</p>';
+    $('#lesson-continue').hidden = true;
+    $('#lesson-reveal').hidden = true;
+    const n = $('#lesson-next');
+    n.hidden = false;
+    n.textContent = next ? '下一课 →' : '回到课程目录';
+    $('#lesson-left').hidden = true;
+    $('#lesson-wrap').classList.add('no-board');
+    sfx.ok();
   }
 
   function nextLesson() {
-    const lesson = state.lesson;
-    if (!lesson) { nav('codex'); return; }
-    if (lesson.recap) { startGame({ level: 3 }); return; }
-    if (lesson.id >= SD.tutorial.LESSONS.length) { nav('codex'); return; }
-    openLesson(lesson.id + 1);
+    if (!state.lessonNextId) { nav('codex'); return; }
+    openLesson(state.lessonNextId);
   }
 
   /* ============================================================
@@ -1076,7 +1363,13 @@
 
       const lessonBtn = e.target.closest('[data-lesson]');
       if (lessonBtn) {
-        openLesson(Number(lessonBtn.dataset.lesson));
+        openLesson(lessonBtn.dataset.lesson);
+        return;
+      }
+
+      const opt = e.target.closest('[data-opt]');
+      if (opt) {
+        answerQuiz(Number(opt.dataset.opt));
         return;
       }
 
@@ -1226,7 +1519,8 @@
         break;
 
       case 'lesson-back': nav('codex'); break;
-      case 'lesson-check': revealLesson(); break;
+      case 'lesson-continue': continueStep(); break;
+      case 'lesson-reveal': revealAnswer(); break;
       case 'lesson-next': nextLesson(); break;
 
       case 'export': {

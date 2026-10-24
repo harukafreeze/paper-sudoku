@@ -22,7 +22,7 @@
   <nav class="tabs" aria-label="主导航">
     <button class="tab" data-nav="home">开局</button>
     <button class="tab" data-nav="stats">战绩</button>
-    <button class="tab" data-nav="codex">图鉴</button>
+    <button class="tab" data-nav="codex">教程</button>
     <button class="tab" data-nav="settings">设置</button>
   </nav>
 </header>
@@ -62,7 +62,7 @@
 
     <div class="home-foot">
       <div class="foot-line"><b id="foot-plays">0</b> 局完成 · <b id="foot-streak">0</b> 天连着来</div>
-      <a class="text-link" href="#" data-nav="codex">还不会解题？从技巧图鉴开始 →</a>
+      <a class="text-link" href="#" data-nav="codex">还不会解题？从第一课开始 →</a>
     </div>
   </section>
 
@@ -146,51 +146,57 @@
     </div>
   </section>
 
-  <!-- ============ 图鉴 ============ -->
+  <!-- ============ 教程 ============ -->
   <section class="screen" data-screen="codex">
     <div class="page-head">
-      <h1>技巧图鉴</h1>
-      <p>十一张卡片，从「看一眼就能填」到「要在纸上画链」。<br>难度档位就是按这里最靠后的那一招定的。</p>
+      <h1>教程</h1>
+      <p>六章十八课，从「一行里不能有两个 3」一路讲到「单数着色」。<br>每一步只做一件事，做错了会告诉你为什么错。</p>
     </div>
-    <div class="card table-card">
-      <table class="level-table" id="level-table"></table>
-    </div>
-    <div class="codex-head" id="codex-head"></div>
-    <div class="codex-grid" id="codex-grid"></div>
+    <div class="course-progress" id="course-progress"></div>
+    <div class="chapter-list" id="chapter-list"></div>
+    <details class="ref-block">
+      <summary>难度对照 &amp; 技巧速查</summary>
+      <div class="card table-card">
+        <table class="level-table" id="level-table"></table>
+      </div>
+      <div class="card table-card">
+        <table class="level-table" id="tech-table"></table>
+      </div>
+    </details>
   </section>
 
-  <!-- ============ 课程 ============ -->
+  <!-- ============ 上课 ============ -->
   <section class="screen" data-screen="lesson">
-    <div class="lesson-wrap">
-      <div class="lesson-left">
+    <div class="lesson-wrap" id="lesson-wrap">
+      <div class="lesson-left" id="lesson-left">
         <div class="lesson-bar">
-          <button class="ghost-btn" data-act="lesson-back">← 返回图鉴</button>
-          <div class="lesson-dots" id="lesson-dots"></div>
+          <span class="lesson-caption" id="lesson-caption"></span>
         </div>
-        <div class="board-shell">
+        <div class="board-shell" id="lesson-board-shell">
           <div class="board" id="lesson-board" role="grid" aria-label="教学棋盘"></div>
           <div class="loading-veil" id="lesson-loading">
-            <div class="veil-inner"><span class="spinner"></span><span class="veil-title">正在找一道合适的例子…</span></div>
+            <div class="veil-inner"><span class="spinner"></span><span class="veil-title" id="lesson-loading-text">正在找一道合适的例子…</span></div>
           </div>
         </div>
       </div>
       <div class="lesson-right">
         <div class="lesson-card">
-          <div class="lesson-kicker" id="lesson-kicker">第 1 课</div>
-          <h1 id="lesson-title">唯一候选</h1>
-          <p class="lesson-sub" id="lesson-sub"></p>
-          <div class="lesson-body">
-            <h3>这是什么</h3>
-            <p id="lesson-what"></p>
-            <h3>为什么成立</h3>
-            <p id="lesson-why"></p>
-            <h3>轮到你了</h3>
-            <p id="lesson-prompt"></p>
+          <button class="ghost-btn lesson-back" data-act="lesson-back">← 返回课程</button>
+          <div class="lesson-kicker" id="lesson-kicker">第 1 章</div>
+          <h1 id="lesson-title"></h1>
+          <p class="lesson-goal" id="lesson-goal"></p>
+          <div class="step-progress" id="step-progress"></div>
+          <div class="step-box">
+            <div class="step-label" id="step-label"></div>
+            <p class="step-instruction" id="step-instruction"></p>
+            <div class="step-body" id="step-body"></div>
+            <div class="step-options" id="step-options"></div>
           </div>
           <div class="lesson-feedback" id="lesson-feedback"></div>
           <div class="lesson-actions">
-            <button class="btn" data-act="lesson-check" id="lesson-check">我点好了</button>
-            <button class="btn ghost" data-act="lesson-next" id="lesson-next" hidden>下一课 →</button>
+            <button class="btn" data-act="lesson-continue" id="lesson-continue">继续</button>
+            <button class="btn ghost" data-act="lesson-reveal" id="lesson-reveal" hidden>看答案</button>
+            <button class="btn" data-act="lesson-next" id="lesson-next" hidden>下一课 →</button>
           </div>
         </div>
       </div>

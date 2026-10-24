@@ -229,10 +229,10 @@
   }
 
   function lessonProgress() {
-    const total = (SD.tutorial && SD.tutorial.LESSONS) ? SD.tutorial.LESSONS.length : 12;
+    const list = (SD.tutorial && SD.tutorial.LESSONS) ? SD.tutorial.LESSONS : [];
     let done = 0;
-    for (let i = 1; i <= total; i++) if (data.tutorial[i]) done++;
-    return { done: done, total: total };
+    list.forEach(function (l) { if (data.tutorial[l.id]) done++; });
+    return { done: done, total: list.length };
   }
 
   /* ---------------- 存档对局 ---------------- */

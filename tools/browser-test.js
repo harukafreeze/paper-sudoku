@@ -215,27 +215,96 @@ function check(name, cond, extra) {
   check('至少解锁一个成就', (await evaluate("document.querySelectorAll('#ach-grid .ach.on').length")) >= 1);
   await shot('04-stats');
 
-  console.log('\n[9] 图鉴');
+  console.log('\n[9] 教程目录');
   await evaluate("document.querySelector('.tab[data-nav=codex]').click()");
   await sleep(300);
-  check('图鉴 11 张卡', (await evaluate("document.querySelectorAll('#codex-grid .codex-card').length")) === 11);
+  check('六章', (await evaluate("document.querySelectorAll('.chapter').length")) === 6);
+  check('十八节课', (await evaluate("document.querySelectorAll('.lesson-row').length")) === 18);
+  check('难度对照 7 行', (await evaluate("document.querySelectorAll('#level-table tbody tr').length")) === 7);
+  check('技巧速查 11 行', (await evaluate("document.querySelectorAll('#tech-table tbody tr').length")) === 11);
   await shot('05-codex');
 
-  console.log('\n[10] 课程');
-  await evaluate("document.querySelector('#codex-grid [data-lesson=\\\"1\\\"]').click()");
-  await sleep(1500);
+  console.log('\n[10] 上课：4×4 规则课');
+  await evaluate("document.querySelector('[data-lesson=\\\"l1\\\"]').click()");
+  await sleep(900);
   check('课程屏激活', await evaluate("document.querySelector('[data-screen=lesson]').classList.contains('active')"));
-  check('教学棋盘渲染了给定数', (await evaluate("document.querySelectorAll('#lesson-board .cell.given').length")) > 15);
-  const accept = await evaluate("SD.ui.state.lessonEx ? SD.ui.state.lessonEx.accept[0] : -1");
-  check('找到了示例', accept >= 0, accept);
-  if (accept >= 0) {
-    await evaluate("document.querySelectorAll('#lesson-board .cell')[" + accept + "].click()");
-    await sleep(220);
-    check('答对后给出解释', (await evaluate("document.querySelector('#lesson-feedback').className")).indexOf('good') >= 0);
-    check('下一课按钮出现', await evaluate("!document.querySelector('#lesson-next').hidden"));
-    check('课程进度已记录', await evaluate("!!JSON.parse(localStorage.getItem('paper-sudoku.v1')).tutorial['1']"));
-  }
+  check('标题是第 1 课', (await evaluate("document.querySelector('#lesson-title').textContent")) === '一行里不能有两个 3');
+  check('4×4 棋盘 16 格', (await evaluate("document.querySelectorAll('#lesson-board .cell').length")) === 16);
+  check('有步骤条', (await evaluate("document.querySelectorAll('.sp-dot').length")) > 3);
+  check('第 1 步是讲解', (await evaluate("document.querySelector('#step-instruction').textContent")).length > 0);
   await shot('06-lesson');
+
+  await evaluate("document.querySelector('#lesson-continue').click()");
+  await sleep(350);
+  check('第 2 步换成点题', (await evaluate("document.querySelector('#step-label').textContent")).indexOf('第 2 步') >= 0);
+  check('点题有看答案按钮', await evaluate("!document.querySelector('#lesson-reveal').hidden"));
+
+  // 先点错一次
+  await evaluate("document.querySelectorAll('#lesson-board .cell')[5].click()");
+  await sleep(200);
+  check('点错给提示', (await evaluate("document.querySelector('#lesson-feedback').className")).indexOf('bad') >= 0);
+  // 再点对
+  await evaluate("document.querySelectorAll('#lesson-board .cell')[0].click()");
+  await sleep(250);
+  check('点对给解释', (await evaluate("document.querySelector('#lesson-feedback').className")).indexOf('good') >= 0);
+  check('可以继续', await evaluate("!document.querySelector('#lesson-continue').hidden"));
+  await shot('07-lesson-step');
+
+  console.log('\n[11] 上课：9×9 技巧课（演示 → 练习）');
+  await evaluate("document.querySelector('[data-act=lesson-back]').click()");
+  await sleep(400);
+  await evaluate("document.querySelector('[data-lesson=\\\"l4\\\"]').click()");
+  await sleep(2600);
+  const kinds = await evaluate("SD.ui.state.lessonSteps.map(function(s){return s.kind}).join(',')");
+  check('步骤含演示与练习', kinds.indexOf('watch') >= 0 && kinds.indexOf('find') >= 0, kinds);
+
+  // 走完两段 intro，进入演示
+  await evaluate("document.querySelector('#lesson-continue').click()");
+  await sleep(250);
+  await evaluate("document.querySelector('#lesson-continue').click()");
+  await sleep(2000);
+  check('切成 9×9', (await evaluate("document.querySelectorAll('#lesson-board .cell').length")) === 81);
+  check('演示后出现按钮', await evaluate("!document.querySelector('#lesson-continue').hidden"));
+  check('演示给了说明', (await evaluate("document.querySelector('#lesson-feedback').textContent")).length > 5);
+
+  await evaluate("document.querySelector('#lesson-continue').click()");
+  await sleep(500);
+  check('进入练习步', (await evaluate("SD.ui.state.lessonSteps[SD.ui.state.lessonIdx].kind")) === 'find');
+  const accept = await evaluate("SD.ui.state.lessonSteps[SD.ui.state.lessonIdx].ex.accept[0]");
+  check('练习有目标格', accept >= 0, accept);
+  await evaluate("document.querySelectorAll('#lesson-board .cell')[" + accept + "].click()");
+  await sleep(300);
+  check('练习答对', (await evaluate("document.querySelector('#lesson-feedback').className")).indexOf('good') >= 0);
+  await shot('08-lesson-find');
+
+  // 走到底，确认进度落库
+  await evaluate("document.querySelector('#lesson-continue').click()");
+  await sleep(300);
+  await evaluate("document.querySelector('#lesson-continue').click()");
+  await sleep(400);
+  check('完成页出现', (await evaluate("document.querySelector('#step-instruction').textContent")).indexOf('过了') >= 0);
+  check('课程进度已记录', await evaluate("!!JSON.parse(localStorage.getItem('paper-sudoku.v1')).tutorial['l4']"));
+
+  console.log('\n[10b] 选择题 & 纯文字课');
+  await evaluate("document.querySelector('[data-act=lesson-back]').click()");
+  await sleep(400);
+  await evaluate("document.querySelector('[data-lesson=\\\"l2\\\"]').click()");
+  await sleep(800);
+  await evaluate("document.querySelector('#lesson-continue').click()");
+  await sleep(350);
+  check('出现三个选项', (await evaluate("document.querySelectorAll('#step-options .opt').length")) === 3);
+  await shot('09-lesson-quiz');
+  await evaluate("document.querySelectorAll('#step-options .opt')[0].click()");
+  await sleep(250);
+  check('选对给解释', (await evaluate("document.querySelector('#lesson-feedback').className")).indexOf('good') >= 0);
+
+  await evaluate("document.querySelector('[data-act=lesson-back]').click()");
+  await sleep(400);
+  await evaluate("document.querySelector('[data-lesson=\\\"l9\\\"]').click()");
+  await sleep(600);
+  check('纯文字课藏起棋盘', await evaluate("document.querySelector('#lesson-left').hidden"));
+  check('纯文字课变单栏', await evaluate("document.querySelector('#lesson-wrap').classList.contains('no-board')"));
+  await shot('10-lesson-text');
 
   console.log('\n[11] 设置');
   await evaluate("document.querySelector('.tab[data-nav=settings]').click()");
@@ -275,6 +344,16 @@ function check(name, cond, extra) {
     });
     fs.writeFileSync(path.join(SHOTS, '09b-mobile-full.png'), Buffer.from(r.data, 'base64'));
   }
+
+  await evaluate("document.querySelector('.tab[data-nav=codex]').click()");
+  await sleep(400);
+  await evaluate("document.querySelector('[data-lesson=\\\"l1\\\"]').click()");
+  await sleep(1000);
+  check('手机上课屏', await evaluate("document.querySelector('[data-screen=lesson]').classList.contains('active')"));
+  check('手机 4×4 棋盘', (await evaluate("document.querySelectorAll('#lesson-board .cell').length")) === 16);
+  await shot('11-mobile-lesson');
+  await evaluate("document.querySelector('.tab[data-nav=home]').click()");
+  await sleep(300);
   await evaluate("document.querySelector('.diff-card[data-level=\\\"3\\\"]').click()");
   await sleep(1200);
   await shot('10-mobile-game');

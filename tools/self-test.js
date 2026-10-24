@@ -94,17 +94,36 @@ for (const d of C.DIFFS) {
     dist);
 }
 
-/* ---------- 4. 课程示例 ---------- */
-console.log('\n[4] 课程示例');
-let lessonOK = 0;
+/* ---------- 4. 课程 ---------- */
+console.log('\n[4] 课程');
+let totalSteps = 0;
 for (const l of T.LESSONS) {
-  if (!l.tech) { console.log('  · 第' + l.id + '课 ' + l.name + '（收尾课，无棋盘）'); continue; }
   const t0 = Date.now();
-  const ex = T.build(l, 0);
+  const built = T.materialize(l, 0);
   const ms = Date.now() - t0;
-  const good = !!ex && ex.accept.length > 0 && ex.before.length === 81;
-  if (good) lessonOK++;
-  ok(good, '第' + String(l.id).padStart(2, '0') + '课 ' + l.name + ' 示例生成（' + ms + 'ms）');
+
+  if (!built || !built.steps.length) {
+    ok(false, l.id + ' ' + l.title + ' 展开失败');
+    continue;
+  }
+  totalSteps += built.steps.length;
+
+  const exSteps = built.steps.filter(function (s) { return s.ex; });
+  const exOK = exSteps.every(function (s) { return s.ex.accept.length > 0 && s.ex.before.length === 81; });
+  const staticBoards = built.steps.filter(function (s) { return s.board; });
+  const staticOK = staticBoards.every(function (s) {
+    return s.board.cells.length === s.board.n * s.board.n;
+  });
+
+  const good = l.tech ? (exSteps.length > 0 && exOK) : staticOK;
+  ok(good, l.id.padEnd(4) + l.title.padEnd(10, '　') + ' ' + built.steps.length + ' 步（' + ms + 'ms）');
+
+  // 演示题和练习题必须是不同的题
+  const watch = built.steps.find(function (s) { return s.kind === 'watch'; });
+  const find = built.steps.find(function (s) { return s.kind === 'find'; });
+  if (watch && find) {
+    ok(C.format(watch.ex.puzzle) !== C.format(find.ex.puzzle), '  └ 演示题与练习题不同');
+  }
 }
 
 console.log('\n结果：' + pass + ' 通过 / ' + fail + ' 失败');
